@@ -1,0 +1,51 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: pr_db
+    environment:
+      POSTGRES_USER: pruser
+      POSTGRES_PASSWORD: prpassword
+      POSTGRES_DB: prdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: always
+
+
+  migrate:
+    image: migrate/migrate
+    container_name: pr_migrate
+    command: [
+      "-path", "/migrations",
+      "-database", "postgres://pruser:prpassword@db:5432/prdb?sslmode=disable",
+      "up"
+    ]
+    volumes:
+      - ./migrations:/migrations:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+  app:
+    build: .
+    container_name: pr_app
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://pruser:prpassword@db:5432/prdb?sslmode=disable
+    depends_on:
+      - db
+      - migrate
+
+volumes:
+  db_data:
+
