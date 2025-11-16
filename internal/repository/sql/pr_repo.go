@@ -3,7 +3,6 @@ package sql
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"time"
 
@@ -126,24 +125,21 @@ func (r *PullRequestRepository) UpdateWithFn(
 		return nil, err
 	}
 
-	arBytes, err := json.Marshal(pr.AssignedReviewers)
-	if err != nil {
-		return nil, err
-	}
+	assigned := pq.StringArray(pr.AssignedReviewers)
 
 	_, err = tx.ExecContext(
 		ctx,
 		`UPDATE pull_requests
-		SET pull_request_name = $1, status = $2, assigned_reviewers = $3, merged_at = $4
-		WHERE pull_request_id = $5`,
-		pr.Name, pr.Status, arBytes, pr.MergedAt, pr.ID,
+		 SET pull_request_name = $1, status = $2, assigned_reviewers = $3, merged_at = $4
+		 WHERE pull_request_id = $5`,
+		pr.Name, pr.Status, assigned, pr.MergedAt, pr.ID,
 	)
 	if err != nil {
+		_ = tx.Rollback()
 		return nil, err
 	}
 
-	err = tx.Commit()
-	if err != nil {
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 
@@ -158,26 +154,26 @@ func (r *PullRequestRepository) getByIDTx(
 	row := tx.QueryRowContext(
 		ctx,
 		`SELECT pull_request_id, pull_request_name, author_id, status, assigned_reviewers, created_at, merged_at
-	FROM pull_requests WHERE pull_request_id = $1`,
+		 FROM pull_requests
+		 WHERE pull_request_id = $1`,
 		prID,
 	)
 
 	var pr domain.PullRequest
-	var arBytes []byte
+	var assigned pq.StringArray
 	var mergedAt sql.NullTime
 
-	if err := row.Scan(&pr.ID, &pr.Name, &pr.AuthorID, &pr.Status, &arBytes, &pr.CreatedAt, &mergedAt); err != nil {
+	if err := row.Scan(&pr.ID, &pr.Name, &pr.AuthorID, &pr.Status, &assigned, &pr.CreatedAt, &mergedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrNotFound
 		}
 		return nil, err
 	}
 
+	pr.AssignedReviewers = []string(assigned)
+
 	if mergedAt.Valid {
 		pr.MergedAt = &mergedAt.Time
-	}
-	if err := json.Unmarshal(arBytes, &pr.AssignedReviewers); err != nil {
-		return nil, err
 	}
 
 	return &pr, nil
