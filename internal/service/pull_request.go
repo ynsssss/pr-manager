@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"log"
 	"math/rand"
 	"slices"
 	"time"
@@ -96,10 +97,20 @@ func (s *PullRequestService) pickReviewers(
 		}
 	}
 	var chosenMembersIDs []string
-	for range min(len(activeMembers), 2) {
-		id := activeMembers[rand.Intn(len(activeMembers))].UserID
-		chosenMembersIDs = append(chosenMembersIDs, id)
+
+	members := append([]domain.TeamMember(nil), activeMembers...)
+
+	rand.Shuffle(len(members), func(i, j int) {
+		members[i], members[j] = members[j], members[i]
+	})
+
+	limit := min(len(members), 2)
+	for i := range limit {
+		chosenMembersIDs = append(chosenMembersIDs, members[i].UserID)
 	}
+
+	log.Println(activeMembers, len(activeMembers))
+	log.Println(chosenMembersIDs, len(chosenMembersIDs))
 
 	return chosenMembersIDs, nil
 }
