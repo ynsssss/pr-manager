@@ -100,6 +100,9 @@ func (r *PullRequestRepository) GetByID(
 	return &pr, nil
 }
 
+// UpdateWithFn is used to query a pr and update it's value
+// in a single transaction based on the business logic
+// provided with closure function
 func (r *PullRequestRepository) UpdateWithFn(
 	ctx context.Context,
 	id string,
